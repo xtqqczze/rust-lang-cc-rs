@@ -1466,9 +1466,9 @@ mod impl_ {
         } else if let Some(r) = find_msbuild_vs17(target, env_getter) {
             Some(r)
         } else if let Some(r) = find_msbuild_vs16(target, env_getter) {
-            return Some(r);
+            Some(r)
         } else if let Some(r) = find_msbuild_vs15(target, env_getter) {
-            return Some(r);
+            Some(r)
         } else {
             find_old_msbuild(target)
         }
