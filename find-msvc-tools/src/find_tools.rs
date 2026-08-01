@@ -1341,44 +1341,41 @@ mod impl_ {
                 let env_getter = StdEnvGetter;
                 let result = find_llvm_tool(tool, target_arch, &env_getter);
 
-                match result {
-                    Some(found_tool) => {
-                        found_tools_count += 1;
+                if let Some(found_tool) = result {
+                    found_tools_count += 1;
 
-                        // Verify the found tool has a valid, non-empty path
-                        assert!(
-                            !found_tool.path().as_os_str().is_empty(),
-                            "Found LLVM tool '{}' should have a non-empty path",
-                            tool
-                        );
+                    // Verify the found tool has a valid, non-empty path
+                    assert!(
+                        !found_tool.path().as_os_str().is_empty(),
+                        "Found LLVM tool '{}' should have a non-empty path",
+                        tool
+                    );
 
-                        // Verify the tool path actually exists on filesystem
-                        assert!(
-                            found_tool.path().exists(),
-                            "LLVM tool '{}' path should exist: {:?}",
-                            tool,
-                            found_tool.path()
-                        );
+                    // Verify the tool path actually exists on filesystem
+                    assert!(
+                        found_tool.path().exists(),
+                        "LLVM tool '{}' path should exist: {:?}",
+                        tool,
+                        found_tool.path()
+                    );
 
-                        // Verify the tool path contains the expected tool name
-                        let path_str = found_tool.path().to_string_lossy();
-                        assert!(
-                            path_str.contains(tool.trim_end_matches(".exe")),
-                            "Tool path '{}' should contain tool name '{}'",
-                            path_str,
-                            tool
-                        );
+                    // Verify the tool path contains the expected tool name
+                    let path_str = found_tool.path().to_string_lossy();
+                    assert!(
+                        path_str.contains(tool.trim_end_matches(".exe")),
+                        "Tool path '{}' should contain tool name '{}'",
+                        path_str,
+                        tool
+                    );
 
-                        // Verify it's in the correct host-specific VS LLVM directory
-                        assert!(
-                            path_str.contains(expected_host_path) || path_str.contains(&expected_host_path.replace("\\", "/")),
-                            "LLVM tool should be in host-specific VS LLVM directory '{}' for {} host, but found: {}",
-                            expected_host_path,
-                            host_name,
-                            path_str
-                        );
-                    }
-                    None => {}
+                    // Verify it's in the correct host-specific VS LLVM directory
+                    assert!(
+                        path_str.contains(expected_host_path) || path_str.contains(&expected_host_path.replace("\\", "/")),
+                        "LLVM tool should be in host-specific VS LLVM directory '{}' for {} host, but found: {}",
+                        expected_host_path,
+                        host_name,
+                        path_str
+                    );
                 }
             }
 
