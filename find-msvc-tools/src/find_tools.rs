@@ -636,7 +636,7 @@ mod impl_ {
                     AARCH64 => "ARM64",
                     _ => return None,
                 };
-                if host_folder != "" {
+                if !host_folder.is_empty() {
                     // E.g. C:\...\VC\Tools\LLVM\x64
                     base_path.push(host_folder);
                 }
