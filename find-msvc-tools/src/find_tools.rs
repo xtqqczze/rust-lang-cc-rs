@@ -1244,6 +1244,115 @@ mod impl_ {
         }
     }
 
+    // Given a registry key, look at all the sub keys and find the one which has
+    // the maximal numeric value.
+    //
+    // Returns the name of the maximal key as well as the opened maximal key.
+    fn max_version(key: &RegistryKey) -> Option<(OsString, RegistryKey)> {
+        let mut max_vers = 0;
+        let mut max_key = None;
+        for subkey in key.iter().filter_map(|k| k.ok()) {
+            let val = subkey
+                .to_str()
+                .and_then(|s| s.trim_start_matches('v').replace('.', "").parse().ok());
+            let val = match val {
+                Some(s) => s,
+                None => continue,
+            };
+            if val > max_vers {
+                if let Ok(k) = key.open(&subkey) {
+                    max_vers = val;
+                    max_key = Some((subkey, k));
+                }
+            }
+        }
+        max_key
+    }
+
+    #[inline(always)]
+    pub(super) fn has_msbuild_version(version: &str, env_getter: &dyn EnvGetter) -> bool {
+        match version {
+            "18.0" => {
+                find_msbuild_vs18(TargetArch::X64, env_getter).is_some()
+                    || find_msbuild_vs18(TargetArch::X86, env_getter).is_some()
+                    || find_msbuild_vs18(TargetArch::Arm64, env_getter).is_some()
+            }
+            "17.0" => {
+                find_msbuild_vs17(TargetArch::X64, env_getter).is_some()
+                    || find_msbuild_vs17(TargetArch::X86, env_getter).is_some()
+                    || find_msbuild_vs17(TargetArch::Arm64, env_getter).is_some()
+            }
+            "16.0" => {
+                find_msbuild_vs16(TargetArch::X64, env_getter).is_some()
+                    || find_msbuild_vs16(TargetArch::X86, env_getter).is_some()
+                    || find_msbuild_vs16(TargetArch::Arm64, env_getter).is_some()
+            }
+            "15.0" => {
+                find_msbuild_vs15(TargetArch::X64, env_getter).is_some()
+                    || find_msbuild_vs15(TargetArch::X86, env_getter).is_some()
+                    || find_msbuild_vs15(TargetArch::Arm64, env_getter).is_some()
+            }
+            "14.0" => LOCAL_MACHINE
+                .open(&OsString::from(format!(
+                    "SOFTWARE\\Microsoft\\MSBuild\\ToolsVersions\\{}",
+                    version
+                )))
+                .is_ok(),
+            _ => false,
+        }
+    }
+
+    pub(super) fn find_devenv(target: TargetArch, env_getter: &dyn EnvGetter) -> Option<Tool> {
+        find_devenv_vs15(target, env_getter)
+    }
+
+    fn find_devenv_vs15(target: TargetArch, env_getter: &dyn EnvGetter) -> Option<Tool> {
+        find_tool_in_vs15_path(r"Common7\IDE\devenv.exe", target, env_getter)
+    }
+
+    // see http://stackoverflow.com/questions/328017/path-to-msbuild
+    pub(super) fn find_msbuild(target: TargetArch, env_getter: &dyn EnvGetter) -> Option<Tool> {
+        // VS 15 (2017) changed how to locate msbuild
+        if let Some(r) = find_msbuild_vs18(target, env_getter) {
+            Some(r)
+        } else if let Some(r) = find_msbuild_vs17(target, env_getter) {
+            Some(r)
+        } else if let Some(r) = find_msbuild_vs16(target, env_getter) {
+            Some(r)
+        } else if let Some(r) = find_msbuild_vs15(target, env_getter) {
+            Some(r)
+        } else {
+            find_old_msbuild(target)
+        }
+    }
+
+    fn find_msbuild_vs15(target: TargetArch, env_getter: &dyn EnvGetter) -> Option<Tool> {
+        find_tool_in_vs15_path(r"MSBuild\15.0\Bin\MSBuild.exe", target, env_getter)
+    }
+
+    fn find_old_msbuild(target: TargetArch) -> Option<Tool> {
+        let key = r"SOFTWARE\Microsoft\MSBuild\ToolsVersions";
+        LOCAL_MACHINE
+            .open(key.as_ref())
+            .ok()
+            .and_then(|key| {
+                max_version(&key).and_then(|(_vers, key)| key.query_str("MSBuildToolsPath").ok())
+            })
+            .map(|path| {
+                let mut path = PathBuf::from(path);
+                path.push("MSBuild.exe");
+                let mut tool = Tool {
+                    tool: path,
+                    is_clang_cl: false,
+                    env: Vec::new(),
+                };
+                if target == TargetArch::X64 {
+                    tool.env.push(("Platform".into(), "X64".into()));
+                }
+                tool
+            })
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -1387,115 +1496,6 @@ mod impl_ {
                 found_tools_count
             );
         }
-    }
-
-    // Given a registry key, look at all the sub keys and find the one which has
-    // the maximal numeric value.
-    //
-    // Returns the name of the maximal key as well as the opened maximal key.
-    fn max_version(key: &RegistryKey) -> Option<(OsString, RegistryKey)> {
-        let mut max_vers = 0;
-        let mut max_key = None;
-        for subkey in key.iter().filter_map(|k| k.ok()) {
-            let val = subkey
-                .to_str()
-                .and_then(|s| s.trim_start_matches('v').replace('.', "").parse().ok());
-            let val = match val {
-                Some(s) => s,
-                None => continue,
-            };
-            if val > max_vers {
-                if let Ok(k) = key.open(&subkey) {
-                    max_vers = val;
-                    max_key = Some((subkey, k));
-                }
-            }
-        }
-        max_key
-    }
-
-    #[inline(always)]
-    pub(super) fn has_msbuild_version(version: &str, env_getter: &dyn EnvGetter) -> bool {
-        match version {
-            "18.0" => {
-                find_msbuild_vs18(TargetArch::X64, env_getter).is_some()
-                    || find_msbuild_vs18(TargetArch::X86, env_getter).is_some()
-                    || find_msbuild_vs18(TargetArch::Arm64, env_getter).is_some()
-            }
-            "17.0" => {
-                find_msbuild_vs17(TargetArch::X64, env_getter).is_some()
-                    || find_msbuild_vs17(TargetArch::X86, env_getter).is_some()
-                    || find_msbuild_vs17(TargetArch::Arm64, env_getter).is_some()
-            }
-            "16.0" => {
-                find_msbuild_vs16(TargetArch::X64, env_getter).is_some()
-                    || find_msbuild_vs16(TargetArch::X86, env_getter).is_some()
-                    || find_msbuild_vs16(TargetArch::Arm64, env_getter).is_some()
-            }
-            "15.0" => {
-                find_msbuild_vs15(TargetArch::X64, env_getter).is_some()
-                    || find_msbuild_vs15(TargetArch::X86, env_getter).is_some()
-                    || find_msbuild_vs15(TargetArch::Arm64, env_getter).is_some()
-            }
-            "14.0" => LOCAL_MACHINE
-                .open(&OsString::from(format!(
-                    "SOFTWARE\\Microsoft\\MSBuild\\ToolsVersions\\{}",
-                    version
-                )))
-                .is_ok(),
-            _ => false,
-        }
-    }
-
-    pub(super) fn find_devenv(target: TargetArch, env_getter: &dyn EnvGetter) -> Option<Tool> {
-        find_devenv_vs15(target, env_getter)
-    }
-
-    fn find_devenv_vs15(target: TargetArch, env_getter: &dyn EnvGetter) -> Option<Tool> {
-        find_tool_in_vs15_path(r"Common7\IDE\devenv.exe", target, env_getter)
-    }
-
-    // see http://stackoverflow.com/questions/328017/path-to-msbuild
-    pub(super) fn find_msbuild(target: TargetArch, env_getter: &dyn EnvGetter) -> Option<Tool> {
-        // VS 15 (2017) changed how to locate msbuild
-        if let Some(r) = find_msbuild_vs18(target, env_getter) {
-            Some(r)
-        } else if let Some(r) = find_msbuild_vs17(target, env_getter) {
-            Some(r)
-        } else if let Some(r) = find_msbuild_vs16(target, env_getter) {
-            Some(r)
-        } else if let Some(r) = find_msbuild_vs15(target, env_getter) {
-            Some(r)
-        } else {
-            find_old_msbuild(target)
-        }
-    }
-
-    fn find_msbuild_vs15(target: TargetArch, env_getter: &dyn EnvGetter) -> Option<Tool> {
-        find_tool_in_vs15_path(r"MSBuild\15.0\Bin\MSBuild.exe", target, env_getter)
-    }
-
-    fn find_old_msbuild(target: TargetArch) -> Option<Tool> {
-        let key = r"SOFTWARE\Microsoft\MSBuild\ToolsVersions";
-        LOCAL_MACHINE
-            .open(key.as_ref())
-            .ok()
-            .and_then(|key| {
-                max_version(&key).and_then(|(_vers, key)| key.query_str("MSBuildToolsPath").ok())
-            })
-            .map(|path| {
-                let mut path = PathBuf::from(path);
-                path.push("MSBuild.exe");
-                let mut tool = Tool {
-                    tool: path,
-                    is_clang_cl: false,
-                    env: Vec::new(),
-                };
-                if target == TargetArch::X64 {
-                    tool.env.push(("Platform".into(), "X64".into()));
-                }
-                tool
-            })
     }
 }
 
