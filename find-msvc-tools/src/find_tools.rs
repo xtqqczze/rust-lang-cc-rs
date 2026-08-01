@@ -1105,13 +1105,13 @@ mod impl_ {
             .map(|dir| dir.path())
             .filter(|dir| {
                 dir.components()
-                    .last()
+                    .next_back()
                     .and_then(|c| c.as_os_str().to_str())
                     .map(|c| c.starts_with("10.") && dir.join("ucrt").is_dir())
                     .unwrap_or(false)
             })
             .max()?;
-        let version = max_libdir.components().last().unwrap();
+        let version = max_libdir.components().next_back().unwrap();
         let version = version.as_os_str().to_str().unwrap().to_string();
         Some((root.into(), version))
     }
@@ -1154,7 +1154,7 @@ mod impl_ {
             .into_iter()
             .rev()
             .find(|dir| dir.join("um").join("x64").join("kernel32.lib").is_file())?;
-        let version = dir.components().last().unwrap();
+        let version = dir.components().next_back().unwrap();
         let version = version.as_os_str().to_str().unwrap().to_string();
         Some((root.into(), version))
     }
