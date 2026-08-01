@@ -785,7 +785,7 @@ mod impl_ {
                 .ok()
                 .and_then(|key| key.query_str("15.0").ok())
                 .map(|path| PathBuf::from(path).join(tool))
-                .and_then(|path| if path.is_file() { Some(path) } else { None });
+                .filter(|path| path.is_file());
         }
 
         path.map(|path| {
