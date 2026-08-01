@@ -84,7 +84,7 @@ fn main() -> ExitCode {
                 .take(cl_like_help_option_idx)
                 .rev()
                 .find_map(|a| a.strip_prefix("--driver-mode="))
-                .map_or(false, |a| a == "cl");
+                == Some("cl");
             if has_cl_clang_driver_before_cl_like_help_option {
                 return ExitCode::SUCCESS;
             } else {
